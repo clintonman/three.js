@@ -22,7 +22,7 @@ THREE.OBJExporter.prototype = {
 
 		var i, j, k, l, m, face = [];
 
-		var parseMesh = function ( mesh ) {
+		var parseMesh = function ( mesh, mtlFileName ) {
 
 			var nbVertex = 0;
 			var nbNormals = 0;
@@ -49,10 +49,10 @@ THREE.OBJExporter.prototype = {
 				// name of the mesh object
 				output += 'o ' + mesh.name + '\n';
 
-				// name of the mesh material
-				if ( mesh.material && mesh.material.name ) {
+				// material library name
+				if( mtlFileName ) {
 
-					output += 'usemtl ' + mesh.material.name + '\n';
+					output += 'mtllib ' + mtlFileName + '.mtl\n';
 
 				}
 
@@ -111,6 +111,13 @@ THREE.OBJExporter.prototype = {
 						output += 'vn ' + normal.x + ' ' + normal.y + ' ' + normal.z + '\n';
 
 					}
+
+				}
+
+				// name of the mesh material
+				if ( mesh.material && mesh.material.name ) {
+
+					output += 'usemtl ' + mesh.material.name + '\n';
 
 				}
 
