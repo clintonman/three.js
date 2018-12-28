@@ -350,6 +350,7 @@ var files = {
 		"misc_exporter_collada",
 		"misc_exporter_gltf",
 		"misc_exporter_obj",
+		"misc_exporter_obj2",
 		"misc_exporter_stl",
 		"misc_fps",
 		"misc_lookat",
