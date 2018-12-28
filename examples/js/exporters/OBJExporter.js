@@ -8,7 +8,7 @@ THREE.OBJExporter.prototype = {
 
 	constructor: THREE.OBJExporter,
 
-	parse: function ( object ) {
+	parse: function ( object, mtlFileName ) {
 
 		var output = '';
 
@@ -114,46 +114,76 @@ THREE.OBJExporter.prototype = {
 
 				}
 
-				// name of the mesh material
-				if ( mesh.material && mesh.material.name ) {
+				var geogrpsArray = [];
+				var meshmatArray = Array.isArray( mesh.material ) ? mesh.material : [ mesh.material ];
+				if ( geometry.groups.length !== 0 ) {
 
-					output += 'usemtl ' + mesh.material.name + '\n';
-
-				}
-
-				// faces
-
-				if ( indices !== null ) {
-
-					for ( i = 0, l = indices.count; i < l; i += 3 ) {
-
-						for ( m = 0; m < 3; m ++ ) {
-
-							j = indices.getX( i + m ) + 1;
-
-							face[ m ] = ( indexVertex + j ) + ( normals || uvs ? '/' + ( uvs ? ( indexVertexUvs + j ) : '' ) + ( normals ? '/' + ( indexNormals + j ) : '' ) : '' );
-
-						}
-
-						// transform the face to export format
-						output += 'f ' + face.join( ' ' ) + "\n";
-
-					}
+					geogrpsArray = geometry.groups.slice();
 
 				} else {
 
-					for ( i = 0, l = vertices.count; i < l; i += 3 ) {
+					geogrpsArray = [ {
+						start: 0,
+						count: indices === null ? vertices.count : indices.count,
+						materialIndex: 0
+					} ];
 
-						for ( m = 0; m < 3; m ++ ) {
+				}
 
-							j = i + m + 1;
+				for ( var grpindex = 0; grpindex < geogrpsArray.length; grpindex ++ ) {
 
-							face[ m ] = ( indexVertex + j ) + ( normals || uvs ? '/' + ( uvs ? ( indexVertexUvs + j ) : '' ) + ( normals ? '/' + ( indexNormals + j ) : '' ) : '' );
+					// name of the mesh material
+					if ( meshmatArray[ grpindex ] ) {
+
+						if ( meshmatArray[ grpindex ].name ) {
+
+							output += 'usemtl ' + meshmatArray[ grpindex ].name + '\n';
+
+						} else {
+
+							output += 'usemtl ' + 'Mat' + geogrpsArray[ grpindex ].materialIndex + '\n';
+							// save new material name into the mesh for later
+							mesh.material.name = 'Mat' + geogrpsArray[ grpindex ].materialIndex++;
 
 						}
 
-						// transform the face to export format
-						output += 'f ' + face.join( ' ' ) + "\n";
+					}
+
+					// faces
+
+					if ( indices !== null ) {
+
+						for ( i = geogrpsArray[ grpindex ].start, l = geogrpsArray[ grpindex ].count; i < l + geogrpsArray[ grpindex ].start; i += 3 ) {
+
+							for ( m = 0; m < 3; m ++ ) {
+
+								j = indices.getX( i + m ) + 1;
+
+								face[ m ] = ( indexVertex + j ) + ( normals || uvs ? '/' + ( uvs ? ( indexVertexUvs + j ) : '' ) + ( normals ? '/' + ( indexNormals + j ) : '' ) : '' );
+
+							}
+
+							// transform the face to export format
+							output += 'f ' + face.join( ' ' ) + "\n";
+
+						}
+
+					} else {
+
+						for ( i = geogrpsArray[ grpindex ].start, l = geogrpsArray[ grpindex ].count; i < l + geogrpsArray[ grpindex ].start; i += 3 ) {
+
+							for ( m = 0; m < 3; m ++ ) {
+
+								j = i + m + 1;
+
+								face[ m ] = ( indexVertex + j ) + ( normals || uvs ? '/' + ( uvs ? ( indexVertexUvs + j ) : '' ) + ( normals ? '/' + ( indexNormals + j ) : '' ) : '' );
+
+							}
+
+							// transform the face to export format
+							output += 'f ' + face.join( ' ' ) + "\n";
+
+						}
 
 					}
 
@@ -250,7 +280,7 @@ THREE.OBJExporter.prototype = {
 
 			if ( child instanceof THREE.Mesh ) {
 
-				parseMesh( child );
+				parseMesh( child, mtlFileName );
 
 			}
 
@@ -263,6 +293,103 @@ THREE.OBJExporter.prototype = {
 		} );
 
 		return output;
+
+	},
+
+	// based on https://stackoverflow.com/questions/35070048/export-a-three-js-textured-model-to-a-obj-with-mtl-file
+	parseMtl: function ( object ) {
+
+		var outputMtl = '';
+		var imageFiles = [];
+
+		var parse = function ( mesh ) {
+
+			var geometry = mesh.geometry;
+
+			if ( geometry instanceof THREE.Geometry ) {
+
+				geometry = new THREE.BufferGeometry().setFromObject( mesh );
+
+			}
+
+			if ( ! ( geometry instanceof THREE.BufferGeometry ) ) {
+
+				return;
+
+			}
+
+			var mminfo = mesh.material;
+			var mmA = Array.isArray( mesh.material ) ? mesh.material : [ mesh.material ];
+
+			// name of the mesh material
+			if ( ! mminfo ) {
+
+				return;
+
+			}
+
+			for ( var matindex = 0; matindex < mmA.length; matindex ++ ) {
+
+				var mm = mmA[ matindex ];
+				if ( mm.name ) {
+
+					outputMtl += 'newmtl ' + mm.name + '\n';
+					outputMtl += 'Ka ' + mm.color.r + ' ' + mm.color.g + ' ' + mm.color.b + ' ' + '\n';
+					outputMtl += 'Kd ' + mm.color.r + ' ' + mm.color.g + ' ' + mm.color.b + ' ' + '\n';
+					outputMtl += mm.specular ? 'Ks ' + mm.specular.r + ' ' + mm.specular.g + ' ' + mm.specular.b + '\n' : '';
+					outputMtl += mm.shininess ? 'Ns ' + mm.shininess + '\n' : '';
+					outputMtl += 'Ni ' + mm.refractionRatio + '\n';
+					outputMtl += 'd ' + mm.opacity + '\n';
+
+					if ( mm.map && mm.map instanceof THREE.Texture ) {
+
+						var file = mm.map.image.currentSrc.slice( mm.map.image.currentSrc.lastIndexOf( "/" ) + 1 );
+
+						outputMtl += 'map_Ka ' + file + '\n';
+						outputMtl += 'map_Kd ' + file + '\n';
+						imageFiles.push( mm.map.image.currentSrc );
+
+					}
+
+					if ( mm.specularMap && mm.specularMap instanceof THREE.Texture ) {
+
+						var file = mm.specularMap.image.currentSrc.slice( mm.specularMap.image.currentSrc.lastIndexOf( "/" ) + 1 );
+
+						outputMtl += 'map_Ks ' + file + '\n';
+						imageFiles.push( mm.specularMap.image.currentSrc );
+
+					}
+					if ( mm.alphaMap && mm.alphaMap instanceof THREE.Texture ) {
+
+						var file = mm.alphaMap.image.currentSrc.slice( mm.alphaMap.image.currentSrc.lastIndexOf( "/" ) + 1 );
+
+						outputMtl += 'map_d ' + file + '\n';
+						imageFiles.push( mm.alphaMap.image.currentSrc );
+
+					}
+
+					outputMtl += '\n';
+
+				}
+
+			}
+
+		};
+
+		object.traverse( function ( child ) {
+
+			if ( child instanceof THREE.Mesh ) {
+
+				parse( child );
+
+			}
+
+		} );
+
+		return {
+			mtldata: outputMtl,
+			imagelinks: imageFiles
+		};
 
 	}
 
